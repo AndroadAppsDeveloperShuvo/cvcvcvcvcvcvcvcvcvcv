@@ -15,7 +15,7 @@ function normalizeBirdType(type) {
     return 'broiler'; 
 }
 
-function initMedicines() {
+async function initMedicines() {
     const container = document.getElementById('medicineListContainer');
     if(container) container.innerHTML = `<div class="text-center py-10 opacity-50">লোড হচ্ছে...</div>`;
 
@@ -26,7 +26,31 @@ function initMedicines() {
         renderFilteredMedicines();
     }
 
-    // 💡 ২. ইন্টারনেট থাকলে ফায়ারবেস থেকে লাইভ ডাটা এনে আপডেট করবে এবং ফোনে সেভ করে রাখবে
+    // 💡 ২. আমাদের লোকাল সার্ভার এপিআই থেকে ডাটা নিয়ে আসবে (১০০% নির্ভরযোগ্য ও দ্রুত)
+    async function loadFromLocalAPI() {
+        try {
+            const response = await fetch('/api/medicines');
+            const data = await response.json();
+            let tempMeds = [];
+            if (data) {
+                Object.values(data).forEach(item => {
+                    item.internalBirdType = normalizeBirdType(item.birdType);
+                    item.day = String(item.day || "1"); 
+                    tempMeds.push(item);
+                });
+                allMedicinesData = tempMeds;
+                localStorage.setItem('offline_medicines_data', JSON.stringify(allMedicinesData)); // ফোনে সেভ
+                renderFilteredMedicines();
+            }
+        } catch (e) {
+            console.warn("Failed to load medicines from local server API:", e);
+        }
+    }
+    
+    // লোড করো লোকাল এপিআই থেকে
+    await loadFromLocalAPI();
+
+    // 💡 ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস সাবস্ক্রিপশন চালু রাখবে (যদি সংযোগ পায় তবে ডাটা রিয়েলটাইমে আপডেট করবে)
     let activeDb = window.medDb || (typeof medDb !== 'undefined' ? medDb : null);
     if (!activeDb && typeof firebase !== 'undefined' && firebase.apps.length > 0) {
         activeDb = firebase.database();
@@ -42,10 +66,12 @@ function initMedicines() {
                     item.day = String(item.day || "1"); 
                     tempMeds.push(item);
                 });
+                allMedicinesData = tempMeds;
+                localStorage.setItem('offline_medicines_data', JSON.stringify(allMedicinesData)); // ফোনে সেভ
+                renderFilteredMedicines();
             }
-            allMedicinesData = tempMeds;
-            localStorage.setItem('offline_medicines_data', JSON.stringify(allMedicinesData)); // ফোনে সেভ
-            renderFilteredMedicines();
+        }, error => {
+            console.warn("Firebase subscriber error (using local API):", error);
         });
     }
 }

@@ -168,11 +168,31 @@
             }
         }
 
-        function loadUserData() {
-            medDb.ref('admin_scroll_text').on('value', s => {
-                const el = document.getElementById('scrollText');
-                if(el) el.innerText = s.val() || "কোনো আপডেট নেই";
-            });
+        async function loadUserData() {
+            // ১. লোকাল সার্ভার থেকে মেসেজ লোড করো (১০০% কাজ করবে)
+            try {
+                const response = await fetch('/api/scroll');
+                const data = await response.json();
+                if (data && data.text) {
+                    const el = document.getElementById('scrollText');
+                    if(el) el.innerText = data.text;
+                }
+            } catch (err) {
+                console.warn("Failed to load scroll text from local server API:", err);
+            }
+
+            // ২. ব্যাকগ্রাউন্ডে ফায়ারবেস যদি কানেক্ট হয়, আপডেট করো
+            if (window.medDb) {
+                medDb.ref('admin_scroll_text').on('value', s => {
+                    const text = s.val();
+                    if (text) {
+                        const el = document.getElementById('scrollText');
+                        if(el) el.innerText = text;
+                    }
+                }, err => {
+                    console.warn("Firebase scroll load error:", err);
+                });
+            }
         }
 
         function toggleMenu(id) { 

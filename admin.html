@@ -227,26 +227,69 @@
         // --- 1. Scrolling Text ---
         const scrollTextEl = document.getElementById("scrollText");
         const scrollInput = document.getElementById("scrollInput");
-        const scrollRef = db.ref("admin_scroll_text");
+        const scrollRef = db ? db.ref("admin_scroll_text") : null;
 
-        scrollRef.on("value", snapshot => {
-            const text = snapshot.val() || "📌 কোন বার্তা নেই।";
-            scrollTextEl.textContent = text;
-            scrollInput.value = text;
-        }, error => {
-            console.error("Scroll text load error: ", error);
-            showToast("মেসেজ লোড ব্যর্থ: " + error.message, "error");
-        });
+        // Load Scroll Text from our local API first (Ground Truth)
+        async function loadScrollText() {
+            try {
+                const response = await fetch('/api/scroll');
+                const data = await response.json();
+                if (data && data.text) {
+                    scrollTextEl.textContent = data.text;
+                    scrollInput.value = data.text;
+                }
+            } catch (err) {
+                console.error("Local API scroll load error:", err);
+            }
+        }
+        loadScrollText();
+
+        if (scrollRef) {
+            scrollRef.on("value", snapshot => {
+                const text = snapshot.val();
+                if (text) {
+                    scrollTextEl.textContent = text;
+                    scrollInput.value = text;
+                    // Keep local DB in sync
+                    fetch('/api/scroll', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    }).catch(() => {});
+                }
+            }, error => {
+                console.warn("Firebase scroll text load error (using local db): ", error);
+            });
+        }
 
         document.getElementById("updateScroll").addEventListener("click", async () => {
             const newText = scrollInput.value.trim();
-            if (newText) {
+            if (!newText) return;
+
+            // 1. Save to Local API (Always succeeds!)
+            try {
+                const res = await fetch('/api/scroll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: newText })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    scrollTextEl.textContent = newText;
+                    scrollInput.value = newText;
+                    showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
+                }
+            } catch (error) {
+                console.error("Local scroll update error: ", error);
+                showToast("আপডেট ব্যর্থ হয়েছে", "error");
+            }
+
+            // 2. Try to sync to Firebase
+            if (scrollRef) {
                 try {
                     await scrollRef.set(newText);
-                    showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
                 } catch (error) {
-                    console.error("Scroll text update error: ", error);
-                    showToast("আপডেট ব্যর্থ: " + error.message, "error");
+                    console.warn("Firebase scroll sync failed (local updated):", error);
                 }
             }
         });
@@ -255,7 +298,7 @@
         const form = document.getElementById("medicineForm");
         const list = document.getElementById("medicineList");
         let editId = null;
-        const medicinesRef = db.ref("admin_medicines");
+        const medicinesRef = db ? db.ref("admin_medicines") : null;
         
         let allAdminMeds = [];
         let currentAdminFilter = 'broiler'; // Default
@@ -271,23 +314,47 @@
             return 'broiler';
         }
 
-        // Fetch Data from Firebase
-        medicinesRef.on("value", snapshot => {
-            allAdminMeds = [];
-            const data = snapshot.val();
-            if (data) {
-                Object.entries(data).forEach(([id, item]) => {
-                    item.id = id;
-                    item.internalBirdType = normalizeBirdType(item.birdType);
-                    item.day = String(item.day || "1");
-                    allAdminMeds.push(item);
-                });
+        // Fetch Data from our Local Server API (Ground Truth)
+        async function fetchMedicinesFromAPI() {
+            try {
+                const response = await fetch('/api/medicines');
+                const data = await response.json();
+                allAdminMeds = [];
+                if (data) {
+                    Object.entries(data).forEach(([id, item]) => {
+                        item.id = id;
+                        item.internalBirdType = normalizeBirdType(item.birdType);
+                        item.day = String(item.day || "1");
+                        allAdminMeds.push(item);
+                    });
+                }
+                renderAdminList();
+            } catch (err) {
+                console.error("Local API medicines load error: ", err);
             }
-            renderAdminList();
-        }, error => {
-            console.error("Firebase load error: ", error);
-            showToast("ওষুধ লোড ব্যর্থ: " + error.message, "error");
-        });
+        }
+        
+        // Initial Fetch
+        fetchMedicinesFromAPI();
+
+        // Also subscribe to Firebase if active
+        if (medicinesRef) {
+            medicinesRef.on("value", snapshot => {
+                const data = snapshot.val();
+                if (data) {
+                    allAdminMeds = [];
+                    Object.entries(data).forEach(([id, item]) => {
+                        item.id = id;
+                        item.internalBirdType = normalizeBirdType(item.birdType);
+                        item.day = String(item.day || "1");
+                        allAdminMeds.push(item);
+                    });
+                    renderAdminList();
+                }
+            }, error => {
+                console.warn("Firebase medicines load error (using local db): ", error);
+            });
+        }
 
         // Tab Switching Function
         function setAdminFilter(rawType) {
@@ -358,15 +425,9 @@
         }
 
         // --- 3. Form Submit & Edit Logic ---
-        async function getNextSerial() {
-            try {
-                const snap = await medicinesRef.once("value");
-                const data = snap.val();
-                if (!data) return 1;
-                return Math.max(...Object.values(data).map(d => d.serial || 0)) + 1;
-            } catch (e) {
-                return 1;
-            }
+        function getNextSerial() {
+            if (allAdminMeds.length === 0) return 1;
+            return Math.max(...allAdminMeds.map(d => d.serial || 0)) + 1;
         }
 
         form.addEventListener("submit", async (e) => {
@@ -384,23 +445,52 @@
             }
 
             try {
+                let savedItem = null;
                 if (editId) {
-                    await medicinesRef.child(editId).update({ birdType, day, medicine, amount, time, note });
-                    editId = null;
-                    showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
+                    // Update in Local API
+                    const response = await fetch(`/api/medicines/${editId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ birdType, day, medicine, amount, time, note })
+                    });
+                    const resJson = await response.json();
+                    if (resJson.success) {
+                        savedItem = resJson.item;
+                        showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
+                    }
                 } else {
-                    const serial = await getNextSerial();
-                    const newRef = medicinesRef.push();
-                    await newRef.set({ id: newRef.key, serial, birdType, day, medicine, amount, time, note });
-                    showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
+                    // Create in Local API
+                    const serial = getNextSerial();
+                    const response = await fetch('/api/medicines', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ birdType, day, medicine, amount, time, note, serial })
+                    });
+                    const resJson = await response.json();
+                    if (resJson.success) {
+                        savedItem = resJson.item;
+                        showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
+                    }
                 }
+
+                // Sync to Firebase (Failsafe)
+                if (medicinesRef && savedItem) {
+                    try {
+                        await medicinesRef.child(savedItem.id).set(savedItem);
+                    } catch (fbErr) {
+                        console.warn("Firebase sync failed:", fbErr);
+                    }
+                }
+
+                // Refresh state and list
+                await fetchMedicinesFromAPI();
                 
                 // যেই জাতের ওষুধ অ্যাড করা হলো, অটোমেটিক সেই ট্যাবে চলে যাবে
                 setAdminFilter(birdType);
                 resetForm();
             } catch (error) {
-                console.error("Firebase write error: ", error);
-                showToast("সেভ করতে ব্যর্থ: " + error.message, "error");
+                console.error("Save error: ", error);
+                showToast("সেভ করতে ব্যর্থ হয়েছে", "error");
             }
         });
 
@@ -423,10 +513,29 @@
         async function deleteItem(id) {
             showConfirm("⚠️ আপনি কি নিশ্চিত এই ওষুধটি ডিলিট করতে চান?", async () => {
                 try {
-                    await medicinesRef.child(id).remove();
-                    showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
+                    // Delete in Local API
+                    const response = await fetch(`/api/medicines/${id}`, {
+                        method: 'DELETE'
+                    });
+                    const resJson = await response.json();
+                    if (resJson.success) {
+                        showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
+                    }
+
+                    // Delete in Firebase (Failsafe)
+                    if (medicinesRef) {
+                        try {
+                            await medicinesRef.child(id).remove();
+                        } catch (fbErr) {
+                            console.warn("Firebase delete sync failed:", fbErr);
+                        }
+                    }
+
+                    // Refresh
+                    await fetchMedicinesFromAPI();
                 } catch (error) {
-                    showToast("ডিলিট ব্যর্থ: " + error.message, "error");
+                    console.error("Delete error: ", error);
+                    showToast("ডিলিট ব্যর্থ হয়েছে", "error");
                 }
             });
         }
