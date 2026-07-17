@@ -143,8 +143,9 @@
             messagingSenderId: "475600173705",
             appId: "1:475600173705:android:0251b1d46457dc4e806458"
         };
-        const medApp = firebase.initializeApp(medicineConfig, "medApp");
-        const medDb = medApp.database();
+        const medApp = firebase.initializeApp(medicineConfig);
+        const medDb = firebase.database();
+        window.medDb = medDb;
 
         function toggleTheme() {
             const html = document.documentElement;
