@@ -1,0 +1,14 @@
+{
+  "name": "amarhisab-com",
+  "version": "1.0.0",
+  "description": "Smart poultry farm management app (আমার হিসাব - স্মার্ট পোল্ট্রি খামার)",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "echo 'No build step required'",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

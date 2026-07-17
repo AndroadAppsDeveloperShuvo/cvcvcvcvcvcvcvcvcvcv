@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>আমার খামার - ওষুধ ম্যানেজার</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root { --color-primary: #00796B; }
+        body { font-family: 'Noto Sans Bengali', sans-serif; -webkit-font-smoothing: antialiased; }
+        body, .page, .bg-white, .bg-gray-50, .text-gray-900, .text-gray-500 { transition: background-color 0.3s, color 0.3s, border-color 0.3s; }
+        .page { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow-y: auto; display: none; }
+        .page-visible { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .scrolling-text { overflow: hidden; white-space: nowrap; background: #E0F2F1; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid var(--color-primary); }
+        .dark .scrolling-text { background: #004D40; border-left-color: #4DB6AC; color: #E0F2F1; }
+        .scrolling-text span { display: inline-block; padding-left: 100%; animation: scroll-left 15s linear infinite; color: var(--color-primary); font-weight: 600; }
+        .dark .scrolling-text span { color: #80CBC4; }
+        @keyframes scroll-left { 0% { transform: translateX(0%); } 100% { transform: translateX(-100%); } }
+        details > summary { list-style: none; cursor: pointer; transition: 0.2s; }
+        details > summary::-webkit-details-marker { display: none; }
+        details[open] > summary { background-color: #E0F2F1; color: #00796B; }
+        .dark details[open] > summary { background-color: #004D40; color: #80CBC4; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { primary: '#00796B' } } } }
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+
+    <!-- Main App Container -->
+    <main id="main-app" class="relative max-w-md mx-auto h-screen overflow-hidden shadow-2xl bg-gray-50 dark:bg-gray-900">
+        
+        <!-- Medicines Section (User Side) -->
+        <div id="medicines-page" class="page page-visible bg-gray-50 dark:bg-gray-900">
+            <header class="sticky top-0 z-40 bg-white/85 dark:bg-gray-800/85 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+                <div class="relative">
+                    <button onclick="toggleMenu('dropdownMenu')" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition flex items-center justify-center" aria-label="Menu">
+                        <span class="material-symbols-outlined dark:text-white text-gray-700">menu</span>
+                    </button>
+                    <!-- Dropdown Menu -->
+                    <div id="dropdownMenu" class="hidden absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                        <button onclick="document.getElementById('profileCard').classList.remove('hidden'); document.getElementById('dropdownMenu').classList.add('hidden');" class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200 transition border-b dark:border-gray-700">
+                            <span class="material-symbols-outlined text-teal-600">person</span> প্রোফাইল
+                        </button>
+                        <a href="admin.html" class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200 transition border-b dark:border-gray-700">
+                            <span class="material-symbols-outlined text-indigo-500">admin_panel_settings</span> এডমিন প্যানেল
+                        </a>
+                        <button onclick="toggleTheme()" class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200 transition">
+                            <span class="material-symbols-outlined text-amber-500">dark_mode</span> ডার্ক মোড
+                        </button>
+                    </div>
+                </div>
+                <h1 class="text-lg font-bold text-teal-700 dark:text-teal-400 font-bold">ওষুধের তালিকা</h1>
+                <button onclick="location.reload()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition flex items-center justify-center" aria-label="Refresh">
+                    <span class="material-symbols-outlined dark:text-white text-gray-700">refresh</span>
+                </button>
+            </header>
+
+            <!-- Profile Modal Card -->
+            <div id="profileCard" class="fixed inset-0 flex items-center justify-center bg-black/60 hidden z-[60] backdrop-blur-sm" onclick="this.classList.add('hidden')">
+                <div class="bg-white dark:bg-gray-800 rounded-3xl p-8 w-80 relative shadow-2xl transform transition-all" onclick="event.stopPropagation()">
+                    <button onclick="document.getElementById('profileCard').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><span class="material-symbols-outlined">close</span></button>
+                    <div class="flex flex-col items-center text-center">
+                        <img src="https://i.ibb.co/NdSxJghH/1759806262489.png" alt="Profile" class="rounded-full w-24 h-24 mb-4 border-4 border-teal-100 p-1">
+                        <h2 class="text-xl font-bold mb-1 dark:text-white">MD SHUVO P.K</h2>
+                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-2xl mt-2">
+                            <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">এই অ্যাপটি তৈরি করেছে শুভ প্রামানিক!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scroll Message, Bird Filter and Search Bar -->
+            <div class="max-w-xl mx-auto p-5 pb-28">
+                <div class="scrolling-text"><span id="scrollText">লোড হচ্ছে...</span></div>
+                
+                <div class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
+                    <button onclick="setBirdFilter('ব্রয়লার')" data-type="broiler" class="bird-filter-btn px-4 py-2 rounded-full bg-teal-700 text-white text-xs font-bold whitespace-nowrap shadow-md transition transform scale-105">ব্রয়লার</button>
+                    <button onclick="setBirdFilter('কালার বার্ড')" data-type="color_bird" class="bird-filter-btn px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold whitespace-nowrap transition">কালার বার্ড</button>
+                    <button onclick="setBirdFilter('সোনালি')" data-type="sonali" class="bird-filter-btn px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold whitespace-nowrap transition">সোনালি</button>
+                    <button onclick="setBirdFilter('দেশি')" data-type="deshi" class="bird-filter-btn px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold whitespace-nowrap transition">দেশি</button>
+                </div>
+
+                <div class="relative mb-6">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <span class="material-symbols-outlined text-teal-600 dark:text-teal-400">search</span>
+                    </div>
+                    <input type="text" id="medicineSearch" onkeyup="renderFilteredMedicines()" placeholder="ওষুধের নাম, দিন বা সময় দিয়ে খুঁজুন..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition font-medium text-sm">
+                </div>
+
+                <!-- Live Medicine List Container -->
+                <div id="medicineListContainer" class="space-y-6 medicine-container"></div>
+            </div>
+
+            <!-- Video Modal Floating Play Button -->
+            <div class="fixed bottom-6 right-6 z-40">
+                <button onclick="openVideoModal()" class="w-16 h-16 rounded-2xl bg-red-600 text-white shadow-lg flex items-center justify-center animate-bounce" aria-label="Play video"><span class="material-symbols-outlined text-4xl">play_circle</span></button>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Video Player Modal -->
+    <div id="video-modal" class="hidden fixed inset-0 bg-black/95 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="bg-black w-full max-w-lg rounded-3xl overflow-hidden relative shadow-2xl border border-white/10">
+            <button onclick="closeVideoModal()" class="absolute top-4 right-4 z-10 bg-white/10 hover:bg-red-600 text-white rounded-full p-2 backdrop-blur-md transition"><span class="material-symbols-outlined">close</span></button>
+            <div class="relative pb-[56.25%] h-0">
+                <iframe id="youtube-frame" class="absolute top-0 left-0 w-full h-full" src="" frameborder="0" allowfullscreen></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast Notification -->
+    <div id="toast" class="hidden fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-5 py-2 rounded-full text-sm z-50 shadow-lg"></div>
+
+    <script>
+        const medicineConfig = {
+            apiKey: "AIzaSyDkqjA1Io411uidSZBLbYJlYHWGVY36zc8",
+            authDomain: "shuvo-all-tools.firebaseapp.com",
+            databaseURL: "https://shuvo-all-tools-default-rtdb.firebaseio.com/",
+            projectId: "shuvo-all-tools",
+            storageBucket: "shuvo-all-tools.appspot.com",
+            messagingSenderId: "475600173705",
+            appId: "1:475600173705:android:0251b1d46457dc4e806458"
+        };
+        const medApp = firebase.initializeApp(medicineConfig, "medApp");
+        const medDb = medApp.database();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        function loadUserData() {
+            medDb.ref('admin_scroll_text').on('value', s => {
+                const el = document.getElementById('scrollText');
+                if(el) el.innerText = s.val() || "কোনো আপডেট নেই";
+            });
+        }
+
+        function toggleMenu(id) { 
+            document.getElementById(id).classList.toggle('hidden'); 
+        }
+
+        document.onclick = (e) => { 
+            if(!e.target.closest('.relative')) {
+                const menu = document.getElementById('dropdownMenu');
+                if (menu) menu.classList.add('hidden'); 
+            }
+        };
+
+        function showToast(m) { 
+            const t = document.getElementById('toast'); 
+            t.innerText = m; 
+            t.classList.remove('hidden'); 
+            setTimeout(() => t.classList.add('hidden'), 3000); 
+        }
+
+        function openVideoModal() { 
+            document.getElementById('video-modal').classList.remove('hidden'); 
+            let v = "https://drive.google.com/file/d/1ErsItnwlAp3miAbUdC-KTNR3OnHQmm5l/preview"; 
+            if (typeof currentBirdType !== 'undefined') {
+                if (currentBirdType === 'broiler') v = "https://drive.google.com/file/d/1ErsItnwlAp3miAbUdC-KTNR3OnHQmm5l/preview"; 
+                else if (currentBirdType === 'color_bird') v = "https://drive.google.com/file/d/1jmpt5J-nsFFLiHfTAglke4UpF_uhBYLe/preview"; 
+            }
+            document.getElementById('youtube-frame').src = v; 
+        }
+
+        function closeVideoModal() { 
+            document.getElementById('video-modal').classList.add('hidden'); 
+            document.getElementById('youtube-frame').src = ""; 
+        }
+
+        // Initialize scroll text loading
+        loadUserData();
+    </script>
+    <script src="medicines.js?v=11"></script>
+    <script>
+        if ('serviceWorker' in navigator) { 
+            window.addEventListener('load', () => { 
+                navigator.serviceWorker.register('sw.js'); 
+            }); 
+        }
+    </script>
+</body>
+</html>

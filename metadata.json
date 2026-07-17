@@ -1,0 +1,8 @@
+{
+  "name": "আমার ওষুধ - স্মার্ট পোল্ট্রি খামার",
+  "description": "স্মার্ট পোল্ট্রি খামার ওষুধ নির্দেশিকা ও এডমিন প্যানেল (Smart Poultry Medicine Manager)",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
