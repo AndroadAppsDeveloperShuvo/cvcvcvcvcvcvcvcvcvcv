@@ -322,10 +322,12 @@
                 allAdminMeds = [];
                 if (data) {
                     Object.entries(data).forEach(([id, item]) => {
-                        item.id = id;
-                        item.internalBirdType = normalizeBirdType(item.birdType);
-                        item.day = String(item.day || "1");
-                        allAdminMeds.push(item);
+                        if (item && typeof item === 'object') {
+                            item.id = id;
+                            item.internalBirdType = normalizeBirdType(item.birdType);
+                            item.day = String(item.day || "1");
+                            allAdminMeds.push(item);
+                        }
                     });
                 }
                 renderAdminList();
@@ -344,10 +346,12 @@
                 if (data) {
                     allAdminMeds = [];
                     Object.entries(data).forEach(([id, item]) => {
-                        item.id = id;
-                        item.internalBirdType = normalizeBirdType(item.birdType);
-                        item.day = String(item.day || "1");
-                        allAdminMeds.push(item);
+                        if (item && typeof item === 'object') {
+                            item.id = id;
+                            item.internalBirdType = normalizeBirdType(item.birdType);
+                            item.day = String(item.day || "1");
+                            allAdminMeds.push(item);
+                        }
                     });
                     renderAdminList();
                 }
@@ -542,7 +546,7 @@
 
         function resetForm() {
             editId = null;
-            document.forms["medicineForm"].reset();
+            form.reset();
             document.getElementById("birdType").value = "ব্রয়লার"; 
             document.getElementById('form-title').innerHTML = '<span class="material-symbols-outlined text-2xl">add_circle</span> নতুন ওষুধ যোগ করুন';
         }

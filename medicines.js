@@ -34,9 +34,11 @@ async function initMedicines() {
             let tempMeds = [];
             if (data) {
                 Object.values(data).forEach(item => {
-                    item.internalBirdType = normalizeBirdType(item.birdType);
-                    item.day = String(item.day || "1"); 
-                    tempMeds.push(item);
+                    if (item && typeof item === 'object') {
+                        item.internalBirdType = normalizeBirdType(item.birdType);
+                        item.day = String(item.day || "1"); 
+                        tempMeds.push(item);
+                    }
                 });
                 allMedicinesData = tempMeds;
                 localStorage.setItem('offline_medicines_data', JSON.stringify(allMedicinesData)); // ফোনে সেভ
@@ -62,9 +64,11 @@ async function initMedicines() {
             
             if (data) {
                 Object.values(data).forEach(item => {
-                    item.internalBirdType = normalizeBirdType(item.birdType);
-                    item.day = String(item.day || "1"); 
-                    tempMeds.push(item);
+                    if (item && typeof item === 'object') {
+                        item.internalBirdType = normalizeBirdType(item.birdType);
+                        item.day = String(item.day || "1"); 
+                        tempMeds.push(item);
+                    }
                 });
                 allMedicinesData = tempMeds;
                 localStorage.setItem('offline_medicines_data', JSON.stringify(allMedicinesData)); // ফোনে সেভ
