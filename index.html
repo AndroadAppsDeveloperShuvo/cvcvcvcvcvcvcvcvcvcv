@@ -136,24 +136,23 @@
     <script>
         const medicineConfig = {
             apiKey: "AIzaSyDkqjA1Io411uidSZBLbYJlYHWGVY36zc8",
-            authDomain: "shuvo-all-tools.firebaseapp.com",
-            databaseURL: "https://shuvo-all-tools-default-rtdb.firebaseio.com/",
-            projectId: "shuvo-all-tools",
-            storageBucket: "shuvo-all-tools.appspot.com",
+            authDomain: "mypoltyfarm.firebaseapp.com",
+            databaseURL: "https://mypoltyfarm-default-rtdb.firebaseio.com/",
+            projectId: "mypoltyfarm",
+            storageBucket: "mypoltyfarm.appspot.com",
             messagingSenderId: "475600173705",
             appId: "1:475600173705:android:0251b1d46457dc4e806458"
         };
-        let medApp, medDb;
+        let medDb = null;
         try {
-            if (!firebase.apps.length) {
-                medApp = firebase.initializeApp(medicineConfig);
-            } else {
-                medApp = firebase.app();
+            if (typeof firebase !== 'undefined') {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(medicineConfig);
+                }
+                medDb = firebase.database();
             }
-            medDb = firebase.database();
         } catch (e) {
             console.error("Firebase init error in index: ", e);
-            medDb = firebase.apps.length ? firebase.database() : firebase.initializeApp(medicineConfig).database();
         }
         window.medDb = medDb;
 

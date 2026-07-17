@@ -158,22 +158,23 @@
         // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyDkqjA1Io411uidSZBLbYJlYHWGVY36zc8",
-            authDomain: "shuvo-all-tools.firebaseapp.com",
-            databaseURL: "https://shuvo-all-tools-default-rtdb.firebaseio.com/",
-            projectId: "shuvo-all-tools",
-            storageBucket: "shuvo-all-tools.appspot.com",
+            authDomain: "mypoltyfarm.firebaseapp.com",
+            databaseURL: "https://mypoltyfarm-default-rtdb.firebaseio.com/",
+            projectId: "mypoltyfarm",
+            storageBucket: "mypoltyfarm.appspot.com",
             messagingSenderId: "475600173705",
             appId: "1:475600173705:android:0251b1d46457dc4e806458"
         };
-        let db;
+        let db = null;
         try {
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
+            if (typeof firebase !== 'undefined') {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                db = firebase.database();
             }
-            db = firebase.database();
         } catch (e) {
             console.error("Firebase init error: ", e);
-            db = firebase.apps.length ? firebase.database() : firebase.initializeApp(firebaseConfig).database();
         }
 
         // --- Custom Dialog Helpers (Avoids sandboxed iframe alert blocks) ---
@@ -284,13 +285,11 @@
                 showToast("আপডেট ব্যর্থ হয়েছে", "error");
             }
 
-            // 2. Try to sync to Firebase
+            // 2. Try to sync to Firebase (Non-blocking background sync)
             if (scrollRef) {
-                try {
-                    await scrollRef.set(newText);
-                } catch (error) {
+                scrollRef.set(newText).catch(error => {
                     console.warn("Firebase scroll sync failed (local updated):", error);
-                }
+                });
             }
         });
 
@@ -477,13 +476,11 @@
                     }
                 }
 
-                // Sync to Firebase (Failsafe)
+                // Sync to Firebase (Non-blocking background sync)
                 if (medicinesRef && savedItem) {
-                    try {
-                        await medicinesRef.child(savedItem.id).set(savedItem);
-                    } catch (fbErr) {
+                    medicinesRef.child(savedItem.id).set(savedItem).catch(fbErr => {
                         console.warn("Firebase sync failed:", fbErr);
-                    }
+                    });
                 }
 
                 // Refresh state and list
@@ -526,13 +523,11 @@
                         showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
                     }
 
-                    // Delete in Firebase (Failsafe)
+                    // Delete in Firebase (Non-blocking background sync)
                     if (medicinesRef) {
-                        try {
-                            await medicinesRef.child(id).remove();
-                        } catch (fbErr) {
+                        medicinesRef.child(id).remove().catch(fbErr => {
                             console.warn("Firebase delete sync failed:", fbErr);
-                        }
+                        });
                     }
 
                     // Refresh

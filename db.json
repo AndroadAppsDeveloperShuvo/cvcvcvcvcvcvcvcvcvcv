@@ -1,4 +1,15 @@
 {
   "admin_scroll_text": "টেস্ট স্ক্রল টেক্সট",
-  "admin_medicines": {}
+  "admin_medicines": {
+    "med_1784260158004_7igny": {
+      "id": "med_1784260158004_7igny",
+      "birdType": "ব্রয়লার",
+      "day": "1",
+      "medicine": "Napa",
+      "amount": "১ গ্রাম",
+      "time": "সকাল",
+      "note": "",
+      "serial": 1
+    }
+  }
 }
