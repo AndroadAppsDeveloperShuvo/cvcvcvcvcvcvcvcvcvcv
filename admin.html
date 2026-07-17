@@ -134,6 +134,26 @@
 
     </main>
 
+    <!-- Custom Toast -->
+    <div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-sm font-bold z-[100] shadow-2xl flex items-center gap-2 transition-all duration-300">
+        <span class="material-symbols-outlined" id="toast-icon">info</span>
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 flex items-center justify-center bg-black/60 hidden z-[90] backdrop-blur-sm" onclick="closeConfirmModal()">
+        <div class="bg-white p-6 rounded-3xl max-w-sm w-[90%] relative shadow-2xl transform transition-all" onclick="event.stopPropagation()">
+            <h3 class="text-lg font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <span class="material-symbols-outlined text-red-500">warning</span> সতর্কতা
+            </h3>
+            <p id="confirmMessage" class="text-sm text-gray-600 font-medium mb-6 leading-relaxed">আপনি কি নিশ্চিত?</p>
+            <div class="flex gap-3">
+                <button id="confirmYesBtn" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition">হ্যাঁ, ডিলিট করুন</button>
+                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold transition">না, বাতিল</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -156,6 +176,54 @@
             db = firebase.apps.length ? firebase.database() : firebase.initializeApp(firebaseConfig).database();
         }
 
+        // --- Custom Dialog Helpers (Avoids sandboxed iframe alert blocks) ---
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toast-icon");
+            const msg = document.getElementById("toast-message");
+            if (!toast) return;
+
+            msg.textContent = message;
+            if (type === 'success') {
+                toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-sm font-bold z-[100] shadow-2xl flex items-center gap-2 bg-teal-800 text-white border border-teal-700 animate-bounce";
+                icon.textContent = "check_circle";
+            } else if (type === 'error') {
+                toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-sm font-bold z-[100] shadow-2xl flex items-center gap-2 bg-rose-800 text-white border border-rose-700 animate-bounce";
+                icon.textContent = "error";
+            } else {
+                toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-sm font-bold z-[100] shadow-2xl flex items-center gap-2 bg-gray-800 text-white border border-gray-700 animate-bounce";
+                icon.textContent = "info";
+            }
+            toast.classList.remove("hidden");
+            setTimeout(() => {
+                toast.classList.add("hidden");
+            }, 3000);
+        }
+
+        let confirmCallback = null;
+        function showConfirm(message, callback) {
+            const modal = document.getElementById("confirmModal");
+            const msg = document.getElementById("confirmMessage");
+            if (!modal) {
+                if (confirm(message)) callback();
+                return;
+            }
+            msg.textContent = message;
+            confirmCallback = callback;
+            modal.classList.remove("hidden");
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById("confirmModal");
+            if (modal) modal.classList.add("hidden");
+            confirmCallback = null;
+        }
+
+        document.getElementById("confirmYesBtn").addEventListener("click", () => {
+            if (confirmCallback) confirmCallback();
+            closeConfirmModal();
+        });
+
         // --- 1. Scrolling Text ---
         const scrollTextEl = document.getElementById("scrollText");
         const scrollInput = document.getElementById("scrollInput");
@@ -165,13 +233,21 @@
             const text = snapshot.val() || "📌 কোন বার্তা নেই।";
             scrollTextEl.textContent = text;
             scrollInput.value = text;
+        }, error => {
+            console.error("Scroll text load error: ", error);
+            showToast("মেসেজ লোড ব্যর্থ: " + error.message, "error");
         });
 
         document.getElementById("updateScroll").addEventListener("click", async () => {
             const newText = scrollInput.value.trim();
             if (newText) {
-                await scrollRef.set(newText);
-                alert("✅ Scrolling text আপডেট হয়েছে!");
+                try {
+                    await scrollRef.set(newText);
+                    showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
+                } catch (error) {
+                    console.error("Scroll text update error: ", error);
+                    showToast("আপডেট ব্যর্থ: " + error.message, "error");
+                }
             }
         });
 
@@ -208,6 +284,9 @@
                 });
             }
             renderAdminList();
+        }, error => {
+            console.error("Firebase load error: ", error);
+            showToast("ওষুধ লোড ব্যর্থ: " + error.message, "error");
         });
 
         // Tab Switching Function
@@ -280,10 +359,14 @@
 
         // --- 3. Form Submit & Edit Logic ---
         async function getNextSerial() {
-            const snap = await medicinesRef.once("value");
-            const data = snap.val();
-            if (!data) return 1;
-            return Math.max(...Object.values(data).map(d => d.serial || 0)) + 1;
+            try {
+                const snap = await medicinesRef.once("value");
+                const data = snap.val();
+                if (!data) return 1;
+                return Math.max(...Object.values(data).map(d => d.serial || 0)) + 1;
+            } catch (e) {
+                return 1;
+            }
         }
 
         form.addEventListener("submit", async (e) => {
@@ -295,22 +378,30 @@
             const time = document.getElementById("time").value;
             const note = document.getElementById("note").value.trim();
 
-            if (!day || !medicine || !amount || !time) return;
-
-            if (editId) {
-                await medicinesRef.child(editId).update({ birdType, day, medicine, amount, time, note });
-                editId = null;
-                alert("✅ আপডেট সম্পন্ন হয়েছে!");
-            } else {
-                const serial = await getNextSerial();
-                const newRef = medicinesRef.push();
-                await newRef.set({ id: newRef.key, serial, birdType, day, medicine, amount, time, note });
-                alert("🎉 নতুন ওষুধ যোগ হয়েছে!");
+            if (!day || !medicine || !amount || !time) {
+                showToast("সবগুলো ঘর পূরণ করুন", "error");
+                return;
             }
-            
-            // যেই জাতের ওষুধ অ্যাড করা হলো, অটোমেটিক সেই ট্যাবে চলে যাবে
-            setAdminFilter(birdType);
-            resetForm();
+
+            try {
+                if (editId) {
+                    await medicinesRef.child(editId).update({ birdType, day, medicine, amount, time, note });
+                    editId = null;
+                    showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
+                } else {
+                    const serial = await getNextSerial();
+                    const newRef = medicinesRef.push();
+                    await newRef.set({ id: newRef.key, serial, birdType, day, medicine, amount, time, note });
+                    showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
+                }
+                
+                // যেই জাতের ওষুধ অ্যাড করা হলো, অটোমেটিক সেই ট্যাবে চলে যাবে
+                setAdminFilter(birdType);
+                resetForm();
+            } catch (error) {
+                console.error("Firebase write error: ", error);
+                showToast("সেভ করতে ব্যর্থ: " + error.message, "error");
+            }
         });
 
         async function editItem(id) {
@@ -330,9 +421,14 @@
         }
 
         async function deleteItem(id) {
-            if (confirm("⚠️ আপনি কি নিশ্চিত এই ওষুধটি ডিলিট করতে চান?")) {
-                await medicinesRef.child(id).remove();
-            }
+            showConfirm("⚠️ আপনি কি নিশ্চিত এই ওষুধটি ডিলিট করতে চান?", async () => {
+                try {
+                    await medicinesRef.child(id).remove();
+                    showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
+                } catch (error) {
+                    showToast("ডিলিট ব্যর্থ: " + error.message, "error");
+                }
+            });
         }
 
         function resetForm() {
