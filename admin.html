@@ -158,10 +158,10 @@
         // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyDkqjA1Io411uidSZBLbYJlYHWGVY36zc8",
-            authDomain: "mypoltyfarm.firebaseapp.com",
-            databaseURL: "https://mypoltyfarm-default-rtdb.firebaseio.com/",
-            projectId: "mypoltyfarm",
-            storageBucket: "mypoltyfarm.appspot.com",
+            authDomain: "shuvo-all-tool.firebaseapp.com",
+            databaseURL: "https://shuvo-all-tool-default-rtdb.firebaseio.com/",
+            projectId: "shuvo-all-tool",
+            storageBucket: "shuvo-all-tool.appspot.com",
             messagingSenderId: "475600173705",
             appId: "1:475600173705:android:0251b1d46457dc4e806458"
         };
@@ -245,6 +245,24 @@
         }
         loadScrollText();
 
+        if (scrollRef) {
+            scrollRef.on("value", snapshot => {
+                const text = snapshot.val();
+                if (text) {
+                    scrollTextEl.textContent = text;
+                    scrollInput.value = text;
+                    // Keep local DB in sync
+                    fetch('/api/scroll', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    }).catch(() => {});
+                }
+            }, error => {
+                console.warn("Firebase scroll text load error (using local db): ", error);
+            });
+        }
+
         document.getElementById("updateScroll").addEventListener("click", async () => {
             const newText = scrollInput.value.trim();
             if (!newText) return;
@@ -256,15 +274,14 @@
                 localStorage.setItem('offline_scroll_text', newText);
                 showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
 
-                // ২. সার্ভার এপিআই-তে সেভ করো এবং রেসপন্সের জন্য অপেক্ষা করো
-                const res = await fetch('/api/scroll', {
+                // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে আপডেট করবে (নন-ব্লকিং)
+                fetch('/api/scroll', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: newText })
-                });
-                await res.json();
+                }).catch(err => console.warn("Background local API scroll sync failed: ", err));
 
-                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং এবং ফেইল-সেফ)
+                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং)
                 if (scrollRef) {
                     scrollRef.set(newText).catch(error => {
                         console.warn("Firebase scroll sync failed:", error);
@@ -320,6 +337,27 @@
         
         // Initial Fetch
         fetchMedicinesFromAPI();
+
+        // Also subscribe to Firebase if active
+        if (medicinesRef) {
+            medicinesRef.on("value", snapshot => {
+                const data = snapshot.val();
+                if (data) {
+                    allAdminMeds = [];
+                    Object.entries(data).forEach(([id, item]) => {
+                        if (item && typeof item === 'object') {
+                            item.id = id;
+                            item.internalBirdType = normalizeBirdType(item.birdType);
+                            item.day = String(item.day || "1");
+                            allAdminMeds.push(item);
+                        }
+                    });
+                    renderAdminList();
+                }
+            }, error => {
+                console.warn("Firebase medicines load error (using local db): ", error);
+            });
+        }
 
         // Tab Switching Function
         function setAdminFilter(rawType) {
@@ -414,65 +452,65 @@
                 const normalizedType = normalizeBirdType(birdType);
 
                 if (editId) {
-                    // ১. সার্ভার এপিআই-তে সেভ করো এবং রেসপন্সের জন্য অপেক্ষা করো (১০০% নির্ভরযোগ্য)
-                    const response = await fetch(`/api/medicines/${editId}`, {
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে আপডেট সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    const idx = allAdminMeds.findIndex(m => m.id === editId);
+                    if (idx !== -1) {
+                        allAdminMeds[idx] = {
+                            ...allAdminMeds[idx],
+                            birdType,
+                            internalBirdType: normalizedType,
+                            day,
+                            medicine,
+                            amount,
+                            time,
+                            note
+                        };
+                        savedItem = allAdminMeds[idx];
+                    } else {
+                        savedItem = { id: editId, birdType, internalBirdType: normalizedType, day, medicine, amount, time, note, serial: 1 };
+                        allAdminMeds.push(savedItem);
+                    }
+                    
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
+
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে সেভ করবে (নন-ব্লকিং)
+                    fetch(`/api/medicines/${editId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ birdType, day, medicine, amount, time, note })
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        savedItem = resJson.item;
-                        
-                        // ২. লোকাল মেমোরি এবং localStorage আপডেট করো
-                        const idx = allAdminMeds.findIndex(m => m.id === editId);
-                        if (idx !== -1) {
-                            allAdminMeds[idx] = {
-                                ...savedItem,
-                                internalBirdType: normalizedType,
-                                day: String(savedItem.day || "1")
-                            };
-                        }
-                        localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
-                        renderAdminList();
-                        showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
-                    } else {
-                        throw new Error("Server update failed");
-                    }
+                    }).catch(err => console.warn("Background local API sync failed: ", err));
+
                 } else {
-                    // ১. সার্ভার এপিআই-তে নতুন ওষুধ সেভ করো এবং রেসপন্সের জন্য অপেক্ষা করো (১০০% নির্ভরযোগ্য)
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে সেভ সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    const id = "med_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
                     const serial = getNextSerial();
-                    const response = await fetch('/api/medicines', {
+                    savedItem = { id, birdType, internalBirdType: normalizedType, day, medicine, amount, time, note, serial };
+                    
+                    allAdminMeds.push(savedItem);
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
+
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে সেভ করবে (নন-ব্লকিং)
+                    fetch('/api/medicines', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ birdType, day, medicine, amount, time, note, serial })
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        savedItem = resJson.item;
-
-                        // ২. লোকাল মেমোরি এবং localStorage আপডেট করো
-                        const newItem = {
-                            ...savedItem,
-                            internalBirdType: normalizedType,
-                            day: String(savedItem.day || "1")
-                        };
-                        allAdminMeds.push(newItem);
-                        localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
-                        renderAdminList();
-                        showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
-                    } else {
-                        throw new Error("Server save failed");
-                    }
+                    }).catch(err => console.warn("Background local API sync failed: ", err));
                 }
 
-                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং এবং ফেইল-সেফ)
+                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং)
                 if (medicinesRef && savedItem) {
                     medicinesRef.child(savedItem.id).set(savedItem).catch(fbErr => {
                         console.warn("Firebase sync failed:", fbErr);
                     });
                 }
 
+                // রিমোট এপিআই আপডেট হয়ে থাকলে ব্যাকগ্রাউন্ডে একবার রিলোড করে নেবে
+                fetchMedicinesFromAPI().catch(() => {});
+                
                 // যেই জাতের ওষুধ অ্যাড করা হলো, অটোমেটিক সেই ট্যাবে চলে যাবে
                 setAdminFilter(birdType);
                 resetForm();
@@ -501,26 +539,22 @@
         async function deleteItem(id) {
             showConfirm("⚠️ আপনি কি নিশ্চিত এই ওষুধটি ডিলিট করতে চান?", async () => {
                 try {
-                    // ১. লোকাল সার্ভার এপিআই থেকে ডিলিট করো এবং অপেক্ষা করো (১০০% নির্ভরযোগ্য)
-                    const response = await fetch(`/api/medicines/${id}`, {
-                        method: 'DELETE'
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        // ২. লোকাল মেমোরি এবং localStorage থেকে ডিলিট করো
-                        allAdminMeds = allAdminMeds.filter(m => m.id !== id);
-                        localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
-                        renderAdminList();
-                        showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে ডিলিট সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    allAdminMeds = allAdminMeds.filter(m => m.id !== id);
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
 
-                        // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস থেকে ডিলিট করবে (নন-ব্লকিং এবং ফেইল-সেফ)
-                        if (medicinesRef) {
-                            medicinesRef.child(id).remove().catch(fbErr => {
-                                console.warn("Firebase delete sync failed:", fbErr);
-                            });
-                        }
-                    } else {
-                        throw new Error("Server delete failed");
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই থেকে ডিলিট করবে (নন-ব্লকিং)
+                    fetch(`/api/medicines/${id}`, {
+                        method: 'DELETE'
+                    }).catch(err => console.warn("Background local API delete failed: ", err));
+
+                    // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস থেকে ডিলিট করবে (নন-ব্লকিং)
+                    if (medicinesRef) {
+                        medicinesRef.child(id).remove().catch(fbErr => {
+                            console.warn("Firebase delete sync failed:", fbErr);
+                        });
                     }
                 } catch (error) {
                     console.error("Delete error: ", error);
