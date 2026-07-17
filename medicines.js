@@ -27,7 +27,10 @@ function initMedicines() {
     }
 
     // 💡 ২. ইন্টারনেট থাকলে ফায়ারবেস থেকে লাইভ ডাটা এনে আপডেট করবে এবং ফোনে সেভ করে রাখবে
-    const activeDb = window.medDb || (typeof medDb !== 'undefined' ? medDb : null);
+    let activeDb = window.medDb || (typeof medDb !== 'undefined' ? medDb : null);
+    if (!activeDb && typeof firebase !== 'undefined' && firebase.apps.length > 0) {
+        activeDb = firebase.database();
+    }
     if (activeDb) {
         activeDb.ref('admin_medicines').on('value', snapshot => {
             const data = snapshot.val();

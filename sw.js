@@ -23,9 +23,22 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    // Only handle GET requests from http/https schemes
+    if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+        return;
+    }
+
+    // Bypass caching for Firebase Realtime Database and external APIs
+    if (event.request.url.includes('firebaseio.com') || event.request.url.includes('googleapis.com')) {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
         .then(response => {
+            if (!response || response.status !== 200) {
+                return response;
+            }
             // ইন্টারনেট থাকলে নতুন ফাইল আনবে এবং ক্যাশে সেভ করে রাখবে
             const clonedResponse = response.clone();
             caches.open(CACHE_NAME).then(cache => cache.put(event.request, clonedResponse));

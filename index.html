@@ -143,8 +143,18 @@
             messagingSenderId: "475600173705",
             appId: "1:475600173705:android:0251b1d46457dc4e806458"
         };
-        const medApp = firebase.initializeApp(medicineConfig);
-        const medDb = firebase.database();
+        let medApp, medDb;
+        try {
+            if (!firebase.apps.length) {
+                medApp = firebase.initializeApp(medicineConfig);
+            } else {
+                medApp = firebase.app();
+            }
+            medDb = firebase.database();
+        } catch (e) {
+            console.error("Firebase init error in index: ", e);
+            medDb = firebase.apps.length ? firebase.database() : firebase.initializeApp(medicineConfig).database();
+        }
         window.medDb = medDb;
 
         function toggleTheme() {
