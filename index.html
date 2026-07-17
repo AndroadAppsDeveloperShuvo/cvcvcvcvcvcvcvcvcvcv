@@ -168,13 +168,23 @@
         }
 
         async function loadUserData() {
+            // ০. অফলাইন ক্যাশড মেসেজ থাকলে তা সাথে সাথে লোড করো
+            const cachedScroll = localStorage.getItem('offline_scroll_text');
+            if (cachedScroll) {
+                const el = document.getElementById('scrollText');
+                if (el) el.innerText = cachedScroll;
+            }
+
             // ১. লোকাল সার্ভার থেকে মেসেজ লোড করো (১০০% কাজ করবে)
             try {
                 const response = await fetch('/api/scroll');
                 const data = await response.json();
                 if (data && data.text) {
                     const el = document.getElementById('scrollText');
-                    if(el) el.innerText = data.text;
+                    if (el) {
+                        el.innerText = data.text;
+                        localStorage.setItem('offline_scroll_text', data.text); // ফোনে সেভ
+                    }
                 }
             } catch (err) {
                 console.warn("Failed to load scroll text from local server API:", err);
@@ -186,7 +196,10 @@
                     const text = s.val();
                     if (text) {
                         const el = document.getElementById('scrollText');
-                        if(el) el.innerText = text;
+                        if (el) {
+                            el.innerText = text;
+                            localStorage.setItem('offline_scroll_text', text); // ফোনে সেভ
+                        }
                     }
                 }, err => {
                     console.warn("Firebase scroll load error:", err);

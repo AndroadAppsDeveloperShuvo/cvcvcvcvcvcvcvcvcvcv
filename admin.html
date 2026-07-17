@@ -267,29 +267,29 @@
             const newText = scrollInput.value.trim();
             if (!newText) return;
 
-            // 1. Save to Local API (Always succeeds!)
             try {
-                const res = await fetch('/api/scroll', {
+                // ১. লোকাল স্ক্রিন এবং localStorage-এ সাথে সাথে সেভ করো (১০০% কাজ করবেই)
+                scrollTextEl.textContent = newText;
+                scrollInput.value = newText;
+                localStorage.setItem('offline_scroll_text', newText);
+                showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
+
+                // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে আপডেট করবে (নন-ব্লকিং)
+                fetch('/api/scroll', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: newText })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    scrollTextEl.textContent = newText;
-                    scrollInput.value = newText;
-                    showToast("✅ স্ক্রলিং বার্তা আপডেট হয়েছে!", "success");
+                }).catch(err => console.warn("Background local API scroll sync failed: ", err));
+
+                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং)
+                if (scrollRef) {
+                    scrollRef.set(newText).catch(error => {
+                        console.warn("Firebase scroll sync failed:", error);
+                    });
                 }
             } catch (error) {
-                console.error("Local scroll update error: ", error);
+                console.error("Scroll update error: ", error);
                 showToast("আপডেট ব্যর্থ হয়েছে", "error");
-            }
-
-            // 2. Try to sync to Firebase (Non-blocking background sync)
-            if (scrollRef) {
-                scrollRef.set(newText).catch(error => {
-                    console.warn("Firebase scroll sync failed (local updated):", error);
-                });
             }
         });
 
@@ -449,42 +449,67 @@
 
             try {
                 let savedItem = null;
+                const normalizedType = normalizeBirdType(birdType);
+
                 if (editId) {
-                    // Update in Local API
-                    const response = await fetch(`/api/medicines/${editId}`, {
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে আপডেট সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    const idx = allAdminMeds.findIndex(m => m.id === editId);
+                    if (idx !== -1) {
+                        allAdminMeds[idx] = {
+                            ...allAdminMeds[idx],
+                            birdType,
+                            internalBirdType: normalizedType,
+                            day,
+                            medicine,
+                            amount,
+                            time,
+                            note
+                        };
+                        savedItem = allAdminMeds[idx];
+                    } else {
+                        savedItem = { id: editId, birdType, internalBirdType: normalizedType, day, medicine, amount, time, note, serial: 1 };
+                        allAdminMeds.push(savedItem);
+                    }
+                    
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
+
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে সেভ করবে (নন-ব্লকিং)
+                    fetch(`/api/medicines/${editId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ birdType, day, medicine, amount, time, note })
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        savedItem = resJson.item;
-                        showToast("✅ ওষুধ আপডেট সম্পন্ন হয়েছে!", "success");
-                    }
+                    }).catch(err => console.warn("Background local API sync failed: ", err));
+
                 } else {
-                    // Create in Local API
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে সেভ সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    const id = "med_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
                     const serial = getNextSerial();
-                    const response = await fetch('/api/medicines', {
+                    savedItem = { id, birdType, internalBirdType: normalizedType, day, medicine, amount, time, note, serial };
+                    
+                    allAdminMeds.push(savedItem);
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
+
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই-তে সেভ করবে (নন-ব্লকিং)
+                    fetch('/api/medicines', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ birdType, day, medicine, amount, time, note, serial })
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        savedItem = resJson.item;
-                        showToast("🎉 নতুন ওষুধ যোগ হয়েছে!", "success");
-                    }
+                    }).catch(err => console.warn("Background local API sync failed: ", err));
                 }
 
-                // Sync to Firebase (Non-blocking background sync)
+                // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস রিয়েলটাইম ডাটাবেসে সেভ করবে (নন-ব্লকিং)
                 if (medicinesRef && savedItem) {
                     medicinesRef.child(savedItem.id).set(savedItem).catch(fbErr => {
                         console.warn("Firebase sync failed:", fbErr);
                     });
                 }
 
-                // Refresh state and list
-                await fetchMedicinesFromAPI();
+                // রিমোট এপিআই আপডেট হয়ে থাকলে ব্যাকগ্রাউন্ডে একবার রিলোড করে নেবে
+                fetchMedicinesFromAPI().catch(() => {});
                 
                 // যেই জাতের ওষুধ অ্যাড করা হলো, অটোমেটিক সেই ট্যাবে চলে যাবে
                 setAdminFilter(birdType);
@@ -514,24 +539,23 @@
         async function deleteItem(id) {
             showConfirm("⚠️ আপনি কি নিশ্চিত এই ওষুধটি ডিলিট করতে চান?", async () => {
                 try {
-                    // Delete in Local API
-                    const response = await fetch(`/api/medicines/${id}`, {
-                        method: 'DELETE'
-                    });
-                    const resJson = await response.json();
-                    if (resJson.success) {
-                        showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
-                    }
+                    // ১. লোকাল মেমোরি এবং localStorage-এ আগে ডিলিট সম্পন্ন করো (১০০% দ্রুত ও নির্ভরযোগ্য)
+                    allAdminMeds = allAdminMeds.filter(m => m.id !== id);
+                    localStorage.setItem('offline_medicines_data', JSON.stringify(allAdminMeds));
+                    renderAdminList();
+                    showToast("🗑️ ওষুধ ডিলিট করা হয়েছে", "success");
 
-                    // Delete in Firebase (Non-blocking background sync)
+                    // ২. ব্যাকগ্রাউন্ডে লোকাল সার্ভার এপিআই থেকে ডিলিট করবে (নন-ব্লকিং)
+                    fetch(`/api/medicines/${id}`, {
+                        method: 'DELETE'
+                    }).catch(err => console.warn("Background local API delete failed: ", err));
+
+                    // ৩. ব্যাকগ্রাউন্ডে ফায়ারবেস থেকে ডিলিট করবে (নন-ব্লকিং)
                     if (medicinesRef) {
                         medicinesRef.child(id).remove().catch(fbErr => {
                             console.warn("Firebase delete sync failed:", fbErr);
                         });
                     }
-
-                    // Refresh
-                    await fetchMedicinesFromAPI();
                 } catch (error) {
                     console.error("Delete error: ", error);
                     showToast("ডিলিট ব্যর্থ হয়েছে", "error");
